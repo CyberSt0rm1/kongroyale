@@ -10,6 +10,9 @@ The admin console is disabled until its key hash is configured. The upstream lic
 cp deploy/homelab.env.example homelab.env
 chmod 600 homelab.env
 # Edit homelab.env for your hostname and trusted proxy address.
+# Choose an unused subnet; these addresses are reserved for this deployment.
+docker network create --subnet 172.16.42.0/24 kongroyale-tunnel
+docker network connect --gw-priority -1 --ip 172.16.42.2 kongroyale-tunnel cloudflare-tunnel
 docker compose --env-file homelab.env pull
 docker compose --env-file homelab.env up -d --wait --wait-timeout 180
 docker compose --env-file homelab.env ps
@@ -40,18 +43,20 @@ server. No database or admin credentials are baked into the image.
 ## Cloudflare route
 
 Use the existing tunnel: add a Published application route for `kong.cyber.gs`, type HTTP, service
-`http://<homelab-LAN-IP>:3020`, with no path restriction. Cloudflare provides public HTTPS and forwards WebSocket
-upgrades on the same port. Do not use localhost when cloudflared is in a separate container.
+`http://kongroyale:3020`, with no path restriction. Cloudflare provides public HTTPS and forwards WebSocket
+upgrades on the same port. The host also publishes `0.0.0.0:3020` for LAN access, but the tunnel must use the direct
+container address: Docker's host-port hairpin route can hide the connector's IP. Do not use localhost.
 
-The game uses the default Docker bridge alongside the existing connector. Find the connector IP without displaying
-its token:
+The game and connector share the external `kongroyale-tunnel` network, at static addresses `.3` and `.2`. This network
+does not replace the connector's existing networks or default route. Inspect the address without displaying its token:
 
 ```sh
-docker inspect cloudflare-tunnel --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+docker inspect cloudflare-tunnel --format '{{with index .NetworkSettings.Networks "kongroyale-tunnel"}}{{.IPAddress}}{{end}}'
 ```
 
-Set that exact IP in `KR_PROXY_IPS` and set `KR_TRUST_PROXY=1`. Recheck it if the connector is recreated. Direct LAN
-connections remain untrusted. You do not need to open router ports for Cloudflare Tunnel.
+Set that exact IP in `KR_PROXY_IPS` and set `KR_TRUST_PROXY=1`. If the connector is recreated, repeat the network-connect
+command above (or add this external network and static address to its own persistent Compose/Portainer configuration).
+Container restarts retain the network attachment. Direct LAN connections remain untrusted. No router ports are needed.
 
 Voice requires HTTPS, microphone permission and squadmates. This deployment retains upstream's direct WebRTC/STUN
 voice: restrictive NATs may prevent audio. TURN support requires a separate integration; no relay is deployed here.

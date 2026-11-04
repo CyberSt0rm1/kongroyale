@@ -15,8 +15,10 @@ services:
       - ${KR_ENV_FILE:-./homelab.env}
     ports:
       - "${KR_BIND_ADDRESS:-0.0.0.0}:${KR_PUBLISH_PORT:-3020}:${KR_PORT:-3020}"
-    # Use the existing bridge, which also hosts this homelab's cloudflared connector.
-    network_mode: bridge
+    # A direct connector-to-game network preserves the proxy's source IP (host-port hairpinning does not).
+    networks:
+      tunnel:
+        ipv4_address: ${KR_CONTAINER_IP:-172.16.42.3}
     volumes:
       - reports:/app/.kongbot
     read_only: true
@@ -37,3 +39,7 @@ services:
         max-file: "3"
 volumes:
   reports:
+networks:
+  tunnel:
+    external: true
+    name: ${KR_DOCKER_NETWORK:-kongroyale-tunnel}
