@@ -8,6 +8,7 @@ refs
 
 .env
 .env.*
+homelab.env
 .admin-key
 .admin-key.*
 *.pem

@@ -1,0 +1,17 @@
+# Keep local credentials, dependencies, reports and generated files out of the image build context.
+.git
+.github
+node_modules
+dist
+dist-admin
+.env
+.env.*
+homelab.env
+.admin-key*
+.kongbot
+*.pem
+*.key
+*.log
+shots
+reports
+refs

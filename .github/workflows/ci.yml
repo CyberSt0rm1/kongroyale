@@ -29,6 +29,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run build
+        env:
+          VITE_KR_PLAYTEST: "0"
       - run: npm test
 
   secrets:
@@ -57,3 +59,40 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+  image:
+    name: publish container
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build image
+        env:
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          docker build --build-arg VITE_KR_PLAYTEST=0 \
+            --label "org.opencontainers.image.revision=$REVISION" \
+            -t "$IMAGE:sha-$REVISION" -t "$IMAGE:latest" .
+      - name: Publish image
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+          REVISION: ${{ github.sha }}
+        run: |
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          docker push "$IMAGE:sha-$REVISION"
+          docker push "$IMAGE:latest"
+      - name: Log out of registry
+        if: always()
+        run: docker logout ghcr.io

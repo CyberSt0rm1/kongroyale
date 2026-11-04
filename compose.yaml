@@ -1,0 +1,39 @@
+# A single game service; all runtime feature settings come from the private environment file.
+name: kongroyale
+services:
+  game:
+    image: ${KR_IMAGE:-ghcr.io/cyberst0rm1/kongroyale:latest}
+    build:
+      context: .
+      args:
+        VITE_KR_PLAYTEST: ${VITE_KR_PLAYTEST:-0}
+        DEPLOY_BASE: ${DEPLOY_BASE:-/}
+    container_name: kongroyale
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ${KR_ENV_FILE:-./homelab.env}
+    ports:
+      - "${KR_BIND_ADDRESS:-0.0.0.0}:${KR_PUBLISH_PORT:-3020}:${KR_PORT:-3020}"
+    # Use the existing bridge, which also hosts this homelab's cloudflared connector.
+    network_mode: bridge
+    volumes:
+      - reports:/app/.kongbot
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${KR_MEMORY_LIMIT:-2g}
+    stop_grace_period: 30s
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  reports:
