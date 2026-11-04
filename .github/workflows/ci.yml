@@ -3,6 +3,7 @@
 name: checks
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -62,7 +63,7 @@ jobs:
 
   image:
     name: publish container
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: [test, secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 20
