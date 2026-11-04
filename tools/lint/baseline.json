@@ -766,5 +766,7 @@
     "shared/world/terrain.ts": [
       "import { Biome, WORLD } from \"./map\";"
     ]
-  }
+  },
+  "url-flags": {},
+  "url-params": {}
 }
