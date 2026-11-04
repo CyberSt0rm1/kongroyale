@@ -79,6 +79,8 @@ on a Mac. Software rendering is too slow to judge anything. Attach a screenshot 
 
 Agents: the `verify-kongroyale` skill (`.agents/skills/verify-kongroyale/`) scripts all of this on macOS, Windows and no-GPU Linux.
 
+Agents: every PR to the fork needs a `release:*` and a `section:*` label, and releases are cut with `tools/release.mts`. The `release` skill (`.agents/skills/release/`) has the rules and commands.
+
 Performance work: read the `perf` skill (`.agents/skills/perf/`). `tools/performance/alloc.mts` measures bytes allocated
 per tick and GC, and `tools/check-size.mts` reports what a production build makes the browser download.
 
