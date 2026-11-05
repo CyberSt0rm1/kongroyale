@@ -27,7 +27,7 @@ interface Undo { g: GMesh; tri: number; a: number; b: number; c: number; pos: Fl
 
 /** a window-glass material: named glass, or an unnamed see-through mirror-smooth PBR one (the coast kit's) — never water,
  * spray, fog or storm cards (shader materials / rough) */
-const isGlassMat = (m: THREE.Material | undefined) => !!m && m.transparent && m.opacity <= 0.8 && m.name !== "glass:shard"
+export const isGlassMat = (m: THREE.Material | undefined) => !!m && m.transparent && m.opacity <= 0.8 && m.name !== "glass:shard"
   && (/glass/i.test(m.name) || ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial === true && m.opacity <= 0.6 && (m as THREE.MeshStandardMaterial).roughness <= 0.08));
 const MAX_TRIS = 400_000;
 const BM = new THREE.Matrix4();
@@ -45,6 +45,10 @@ const V = new THREE.Vector3(), HIT = makeHit();
 // meshes that join the scene after the first scan (a streamed module, an HLOD rebuild) reach the live GlassFx through
 // ONE structure listener (engine/scene-hooks) — no periodic scene walks
 let live: GlassFx | null = null, hooked = false;
+
+const shardMaterial = () => new THREE.MeshStandardMaterial({ name: "glass:shard", color: "#d9f1f7", roughness: 0.04, metalness: 0.35, envMapIntensity: 2.4, transparent: true, opacity: 0.82, side: THREE.DoubleSide });
+/** the shards' program for the session prewarm (game/render.ts renderPrefabs): every GlassFx makes and disposes its own */
+export function glassShardPrefab(): THREE.Object3D { return new THREE.InstancedMesh(new THREE.PlaneGeometry(0.01, 0.01), shardMaterial(), 1); }
 
 export class GlassFx {
   private readonly meshes: GMesh[] = [];
@@ -70,7 +74,7 @@ export class GlassFx {
     const p = [0, 0.5, 0.004, -0.32, -0.42, 0.004, 0.38, -0.3, 0.004, 0, 0.5, -0.004, 0.38, -0.3, -0.004, -0.32, -0.42, -0.004];
     g.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
     g.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ name: "glass:shard", color: "#d9f1f7", roughness: 0.04, metalness: 0.35, envMapIntensity: 2.4, transparent: true, opacity: 0.82, side: THREE.DoubleSide });
+    const mat = shardMaterial();
     this.shards = new THREE.InstancedMesh(g, mat, SHARDS);
     this.shards.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.shards.frustumCulled = false; this.shards.castShadow = false; this.shards.receiveShadow = false;

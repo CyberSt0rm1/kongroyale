@@ -1,5 +1,20 @@
 # Homelab deployment
 
+## Ray performance trial
+
+The `trial/ray-performance` branch integrates RayFernando1337/kongroyale at `cad8bad` while retaining this homelab's
+Docker deployment. It publishes `ghcr.io/cyberst0rm1/kongroyale:ray-trial` and an immutable `sha-<full commit>` tag.
+The main branch and `latest` image remain available separately. The currently deployed image is pinned in the private
+`homelab.env`; a rollback changes only `KR_IMAGE` to the previous tag and runs the same `pull` / `up -d` commands.
+
+For the later performance test, open `https://kong.cyber.gs/?perfhud&seed=42`. The HUD records frame, GPU, memory and
+network metrics. Press F8 when a stall occurs to save a report to this server; `KR_PLAYTEST_BUNDLES` controls its
+storage folder, and the template places it under the persistent reports volume. Set it to `0` to disable bundle
+storage. The fork caps bundle storage at 500 bundles or 1 GB. These tools do not establish a speedup until comparable
+sessions have actually been measured.
+
+The old image is `ghcr.io/cyberst0rm1/kongroyale:sha-39ad85c4c7cfb154242916083bde3665b35793cb`.
+
 The image runs one Node server for HTTP, game WebSockets and voice signalling. Browser rendering and voice audio run
 on the players' devices. MongoDB is optional; reports persist in the `kongroyale_reports` Docker volume without it.
 The admin console is disabled until its key hash is configured. The upstream licence and credits are retained.
