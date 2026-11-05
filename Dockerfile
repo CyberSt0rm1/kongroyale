@@ -6,7 +6,11 @@ RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
 ARG VITE_KR_PLAYTEST=0
 ARG DEPLOY_BASE=/
-RUN VITE_KR_PLAYTEST="$VITE_KR_PLAYTEST" DEPLOY_BASE="$DEPLOY_BASE" npm run build
+ARG VITE_KR_SHA=unknown
+ARG VITE_KR_CHANNEL=next
+ARG VITE_KR_TAG=
+RUN VITE_KR_PLAYTEST="$VITE_KR_PLAYTEST" DEPLOY_BASE="$DEPLOY_BASE" \
+    VITE_KR_SHA="$VITE_KR_SHA" VITE_KR_CHANNEL="$VITE_KR_CHANNEL" VITE_KR_TAG="$VITE_KR_TAG" npm run build
 
 FROM node:22-bookworm-slim AS runtime
 LABEL org.opencontainers.image.source="https://github.com/CyberSt0rm1/kongroyale" \

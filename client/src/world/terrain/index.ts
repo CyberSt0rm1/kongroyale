@@ -7,12 +7,13 @@ import { WORLD } from "../../../../shared/world/map";
 import { TERRAIN_CAMS, badlandsAt, lavaChannels, primeTerrainRocks, type LavaLine } from "../../../../shared/world/terrain-gen";
 import { terrainData } from "./load";
 import { fillLayerArrays, layerArraysFrom, loadLayerArrays } from "./textures";
-import { startTerrainJobs } from "./jobs";
-import { buildTerrainGpuData, gpuDataFromArrays } from "./data";
+import { releaseTerrainJobs, startTerrainJobs } from "./jobs";
+import { computeTerrainGpuArrays, gpuDataFromArrays, stepSplatFrom } from "./data";
 import { makeTerrainMaterial } from "./material";
 import { TerrainLOD } from "./lod";
 import { buildRocks, setRockGround } from "./rocks";
 import { buildSteam } from "./steam";
+import { flag } from "../../flags";
 
 const V = (pos: CamSpec["pos"], target: CamSpec["target"], o: Partial<CamSpec> = {}): CamSpec => ({ pos, target, fov: 50, ...o });
 
@@ -54,23 +55,23 @@ const mod: WorldModule = {
     await ctx.yield();   // yields between the build stages: no single multi-second task
     const dj = await gpuJob;
     const lava: LavaLine[] = lavaChannels(t);
-    let gpu: ReturnType<typeof buildTerrainGpuData>;
-    if (dj && dj.hash === t.hash) gpu = gpuDataFromArrays(dj);
-    else gpu = buildTerrainGpuData(t, lava);
+    const ga = dj && dj.hash === t.hash ? dj : computeTerrainGpuArrays(t, lava);
+    releaseTerrainJobs();
+    const gpu = gpuDataFromArrays(ga);
+    ctx.shared.set("terrainSteps", stepSplatFrom(ga));
     mark("gpuData");
     await ctx.yield();
     const { material, farMaterial, uniforms } = makeTerrainMaterial(arrays, gpu);
     mark("material");
     await ctx.yield();
     // dev flags: ?tfar=0 (no far program)  ?rocks=0 (skip rock meshes)  ?steam=0
-    const q = new URLSearchParams(location.search);
     const lod = new TerrainLOD(t, material);
     // the instanced LOD's height atlas + node placement uniforms (compiled into both programs on first use)
     Object.assign(uniforms, lod.instUniforms);
     // (the full splat stops at ~300 m — beyond it the 3–9 m texture tiles are sub-pixel and the baked far
     // albedo carries the same colour for one fetch; the cone at the biome-04 view is 350–500 m away)
     uniforms.uFarD.value.set(280, 350);   // (the same in captures as in the game — benches measure what players get)
-    if (q.get("tfar") !== "0") { lod.farMaterial = farMaterial; lod.farStart = 350; }
+    if (flag("tfar")) { lod.farMaterial = farMaterial; lod.farStart = 350; }
     ctx.scene.add(lod.group);
     ctx.scene.add(lod.shadowProxy());
     const vsz = new THREE.Vector2();
@@ -90,13 +91,13 @@ const mod: WorldModule = {
     ctx.scene.add(abyss);
 
     mark("lod+far");
-    if (q.get("rocks") !== "0") ctx.scene.add(rocks.group);
+    if (flag("rocks")) ctx.scene.add(rocks.group);
 
     // steam vents beside the lava rivers in the badlands
     // (+ hero vents in the biome-04 foreground, camera-relative like the target art's steam at the lower left)
     const vc = TERRAIN_CAMS["biome-04-volcanic"], vfx = vc.target[0] - vc.pos[0], vfz = vc.target[2] - vc.pos[2], vfl = Math.hypot(vfx, vfz);
     const rel = (f: number, r: number, s: number): [number, number, number] => [vc.pos[0] + vfx / vfl * f - vfz / vfl * r, vc.pos[2] + vfz / vfl * f + vfx / vfl * r, s];
-    const steam = q.get("steam") === "0" ? null : buildSteam(lava, (x, z) => ctx.terrain.height(x, z), (x, z) => badlandsAt(x, z) > 0.35,
+    const steam = !flag("steam") ? null : buildSteam(lava, (x, z) => ctx.terrain.height(x, z), (x, z) => badlandsAt(x, z) > 0.35,
       [rel(15, -12, 1.0), rel(58, -22, 1.2), rel(80, 16, 1.1)], rocks.instances.filter((r) => Math.hypot(r.x + 620, r.z + 560) < 420));
     if (steam) ctx.scene.add(steam.mesh);
 

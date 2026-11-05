@@ -13,6 +13,7 @@
 //   • per-instance tint (instanceColor) and vertex-colour AO
 // All materials share ONE uniform set (`VEG_UNIFORMS`) that the veg module updates per frame.
 import * as THREE from "three";
+import { flag } from "../../flags";
 
 export const VEG_UNIFORMS = {
   uTime: { value: 12 },
@@ -47,7 +48,7 @@ export const VEG_UNIFORMS = {
 
 /** the tier crossfade lasts 0.45 s and its dither moves every frame under TAA (a real
  *  blend instead of a fixed screen-door pattern sweeping over the plant). ?vegxfade=0 = the old crossfade (A/B) */
-export const VEG_XFADE = typeof location === "undefined" ? true : new URLSearchParams(location.search).get("vegxfade") !== "0";
+export const VEG_XFADE = flag("vegxfade");
 /** LOD crossfade duration (s) — lod.ts keeps both tiers in the buffers this long after a switch */
 export const VEG_FADE_T = VEG_XFADE ? 0.45 : 0.28;
 
@@ -677,7 +678,7 @@ let keySeq = 0;
 
 export function foliageMaterial(o: FoliageOpts): FoliageMaterials {
   const mat = new THREE.MeshStandardMaterial({
-    map: o.map, normalMap: o.normalMap, color: o.color ?? 0xffffff,
+    map: o.map, color: o.color ?? 0xffffff,
     roughness: o.roughness ?? 0.55, metalness: o.metalness ?? 0,
     // opaque parts (bark, stems, nuts) never alpha-test: a discard in the shader costs the GPU its hidden-surface removal
     alphaTest: o.alphaTest ?? (o.translucency ? 0.5 : 0), side: o.doubleSide === false ? THREE.FrontSide : THREE.DoubleSide,
@@ -687,7 +688,7 @@ export function foliageMaterial(o: FoliageOpts): FoliageMaterials {
     // camera. The impostors keep it.)
     fog: false,
   });
-  if (o.normalMap) mat.normalScale.set(o.normalScale ?? 1, o.normalScale ?? 1);
+  if (o.normalMap) { mat.normalMap = o.normalMap; mat.normalScale.set(o.normalScale ?? 1, o.normalScale ?? 1); }
   const leafy = !!o.translucency;
   const own = {
     uHeight: { value: o.height ?? 10 },

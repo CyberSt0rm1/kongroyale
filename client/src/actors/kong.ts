@@ -25,6 +25,7 @@ import { heldMuzzle, HELD_SCALE } from "../weapons/held";
 import { UNBOUNCE_GLSL } from "./look";
 import { gunSpec } from "../weapons/guns/index";
 import { loadAccessories, type AccPiece, type Outfit } from "./outfits";
+import { flag } from "../flags";
 
 /** socket-local foregrip of a two-handed gun (GunSpec.foreAnchor − gripAnchor, × HELD_SCALE), null for one-handed */
 const foreCache = new Map<WeaponId, THREE.Vector3 | null>();
@@ -72,12 +73,11 @@ const rimP = (px: number, r: number[]) => r[4] + (r[5] - r[4]) * rimT(px, r);
  *  near-black in shade) — premultiplied colour added as emissive × albedo */
 const FILL = new THREE.Color(0.09, 0.08, 0.062);
 /** dev: ?kongtier=0|1|2 forces every kong into one LOD tier (LOD captures) */
-const QS = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
 /** dev: ?kongproxy=<cm> overrides the shadow proxy shrink (0 = no kong shadows at all) */
-const PROXY_CM = QS.has("kongproxy") ? Number(QS.get("kongproxy")) : null;
-const FORCE_TIER: Tier | null = (() => { try { const v = new URLSearchParams(location.search).get("kongtier"); return v === null ? null : (Math.max(0, Math.min(2, Number(v))) as Tier); } catch { return null; } })();
+const PROXY_CM = flag("kongproxy");
+const FORCE_TIER: Tier | null = (() => { try { const v = flag("kongtier"); return v === null ? null : (Math.max(0, Math.min(2, Number(v))) as Tier); } catch { return null; } })();
 /** v2 ripe-yellow chroma / value (dev: ?kysat= / ?kyval= to tune) */
-const YSAT = QS.has("kysat") ? Number(QS.get("kysat")) : 1.12, YVAL = QS.has("kyval") ? Number(QS.get("kyval")) : 0.97;
+const YSAT = flag("kysat"), YVAL = flag("kyval");
 // per-kong look variety (subtle: the brand look is chocolate fur + brick-red shorts)
 const SHORTS = ["#ffffff", "#f2e6e0", "#ffd9c8", "#e8d0d0", "#fff0e0", "#f6dcd2"].map((c) => new THREE.Color(c));
 
@@ -432,7 +432,11 @@ class KongManager {
   slots: Slot[] = [];
   private free: number[] = [];
   group = new THREE.Group();
-  mats: ReturnType<typeof createKongMaterials>;
+  /** the procedural kong's painted materials: only the procedural body draws with them (?kongv=1, or kong.glb failed
+   *  to load), so they are painted on first use. (perf: painting them up front cost 0.5-0.8 s of main thread in every
+   *  boot, inside the first createKong, though the Blender kong never draws them) */
+  private get mats(): KongMaterials { return this.paintedMats ??= createKongMaterials(); }
+  private paintedMats: KongMaterials | null = null;
   weapons: WeaponsKit;
   tris = { hi: 0, lo: 0, min: 0 };
   batches: Batch[] = [];
@@ -476,7 +480,6 @@ class KongManager {
     for (let i = MAX_KONGS - 1; i >= 0; i--) this.free.push(i);
     this.texs = this.datas.map((d) => { const t = new THREE.DataTexture(d, ROW, MAX_KONGS, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; return t; });
     this.uBones = { value: this.texs[0] }; this.uBonesPrev = { value: this.texs[1] };
-    this.mats = createKongMaterials();
     this.weapons = createWeaponsKit(ctx);
     this.asset = asset;
     if (asset) {
@@ -724,14 +727,29 @@ class KongManager {
     this.wpnGeo.set(id, out);
     console.info(`[kong] weapon LOD ${id}: ${out.map((g) => g.index!.count / 3).join(" / ")} tris in ${(performance.now() - t0).toFixed(0)} ms`);
   }
+  /** the far-weapon batches' one material: kong-patched and atmos-patched when it is made, so no batch ever draws it
+   *  unpatched and the match warm-up (index.ts prewarmMatch, weaponWarm) links its final program before a match */
+  weaponMaterial(): THREE.Material {
+    if (this.wpnMat) return this.wpnMat;
+    const m = this.patchKong(Object.assign(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.05 }), { name: "kong-weapon" }), "weapon");
+    (this.ctx.shared.get("atmos") as { patch?: (m: THREE.Material) => void } | undefined)?.patch?.(m);
+    return this.wpnMat = m;
+  }
+  /** tiny meshes carrying the far-weapon material and its motion-vector material, for the warm-up compile (positions +
+   *  normals, like a weapon batch: the program key reads which attributes the geometry has) */
+  weaponWarm(): THREE.Object3D {
+    const g = new THREE.Group(), geo = new THREE.PlaneGeometry(0.01, 0.01);
+    g.add(new THREE.Mesh(geo, this.weaponMaterial()), new THREE.Mesh(geo, this.velMat(true)));
+    g.traverse((o) => { o.frustumCulled = false; });
+    return g;
+  }
   private weaponBatch(id: WeaponId, t: number): Batch | null {
     const key = `${id}|${t}`;
     let b = this.wpnBatches.get(key);
     if (b) return b;
     const gs = this.wpnGeo.get(id);
     if (!gs) return null;
-    this.wpnMat ??= this.patchKong(Object.assign(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.05 }), { name: "kong-weapon" }), "weapon");
-    b = this.addBatch("weapon", "weapon", gs[t], this.wpnMat, false);
+    b = this.addBatch("weapon", "weapon", gs[t], this.weaponMaterial(), false);
     b.list = [];
     b.mesh.name = `kong-weapon-${id}-${t ? "min" : "lo"}`;
     this.wpnBatches.set(key, b);
@@ -782,6 +800,11 @@ class KongManager {
     };
     d.customProgramCacheKey = () => `kong-bones4-depth-${shrink}${weapon ? "-w" : ""}`;
     return d;
+  }
+
+  warmBatches(): THREE.Object3D {
+    for (const id of this.wpnGeo.keys()) { this.weaponBatch(id, 0); this.weaponBatch(id, 1); this.weaponShadowBatch(id); }
+    return this.group;
   }
 
   private addBatch(tier: Batch["tier"], mat: Batch["mat"], merged: THREE.BufferGeometry, material: THREE.Material, proxy: boolean, weapon = false): Batch {
@@ -1068,7 +1091,7 @@ export async function createKong(ctx: WorldCtx, opts: { variant?: number; lod?: 
   };
   const eyeM = new THREE.Matrix4(), eyeV = new THREE.Vector3(), gazeXY = { x: 0, y: 0 };
   // ?fp3=0 = the older outstretched POV arms (A/B)
-  const POV_TUCK = typeof location === "undefined" || new URLSearchParams(location.search).get("fp3") !== "0";
+  const POV_TUCK = flag("fp3");
   // first-person body (pov): freefall places the head behind the camera (offset learned from the last frame) + fist IK
   let inPov = false;
   const povP: KongPose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vz: 0, vy: 0, state: "freefall", crouch: false, sprint: false, weapon: null, team: 0, friendly: true };

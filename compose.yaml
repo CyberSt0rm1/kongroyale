@@ -8,6 +8,9 @@ services:
       args:
         VITE_KR_PLAYTEST: ${VITE_KR_PLAYTEST:-0}
         DEPLOY_BASE: ${DEPLOY_BASE:-/}
+        VITE_KR_SHA: ${VITE_KR_SHA:-unknown}
+        VITE_KR_CHANNEL: ${VITE_KR_CHANNEL:-next}
+        VITE_KR_TAG: ${VITE_KR_TAG:-}
     container_name: kongroyale
     restart: unless-stopped
     init: true

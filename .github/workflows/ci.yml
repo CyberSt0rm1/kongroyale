@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, trial/ray-performance]
 
 permissions:
   contents: read
@@ -63,7 +63,7 @@ jobs:
 
   image:
     name: publish container
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/trial/ray-performance')
     needs: [test, secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -78,22 +78,31 @@ jobs:
         env:
           REPOSITORY: ${{ github.repository }}
           REVISION: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           IMAGE="ghcr.io/${REPOSITORY,,}"
+          TAG=latest
+          CHANNEL=stable
+          if [ "$BRANCH" = trial/ray-performance ]; then TAG=ray-trial; CHANNEL=next; fi
           docker build --build-arg VITE_KR_PLAYTEST=0 \
+            --build-arg "VITE_KR_SHA=${REVISION:0:7}" \
+            --build-arg "VITE_KR_CHANNEL=$CHANNEL" \
             --label "org.opencontainers.image.revision=$REVISION" \
-            -t "$IMAGE:sha-$REVISION" -t "$IMAGE:latest" .
+            -t "$IMAGE:sha-$REVISION" -t "$IMAGE:$TAG" .
       - name: Publish image
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY_USER: ${{ github.actor }}
           REPOSITORY: ${{ github.repository }}
           REVISION: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
           IMAGE="ghcr.io/${REPOSITORY,,}"
+          TAG=latest
+          if [ "$BRANCH" = trial/ray-performance ]; then TAG=ray-trial; fi
           docker push "$IMAGE:sha-$REVISION"
-          docker push "$IMAGE:latest"
+          docker push "$IMAGE:$TAG"
       - name: Log out of registry
         if: always()
         run: docker logout ghcr.io
