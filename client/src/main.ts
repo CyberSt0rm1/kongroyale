@@ -83,6 +83,7 @@ gameImport?.catch(() => { /* reported by the game stage */ });
 if (gameMode) { startStaticWorld(); startLootSpotsWorker(); } // (perf: the loot spots off the main thread too)
 
 
+const auditReady = flag("resaudit") ? import("./engine/res/audit").then((m) => { kr.resAudit = m.auditRenderer(() => (kr.engine as Engine | undefined)?.renderer); }, (e) => report("resaudit", e)) : null;
 const canvas = document.getElementById("c") as HTMLCanvasElement;
 // the game page builds at the tier of the player's video preset (?q= wins; view-camera pages ignore it)
 const videoQ = gameMode && !shot && flag("q") === null ? bootQuality() : null;
@@ -211,6 +212,7 @@ const scopeOf = new Map<string, Scope>();
 
 /** build one module; returns it (or null on error) with the scene roots it added */
 async function buildOne(id: string, streamed: boolean): Promise<WorldModule | null> {
+  await auditReady;
   kr.stage = streamed ? kr.stage : `build:${id}`;
   if (streamed) kr.streamStage = `build:${id}`;
   else { enterStep(id); await nextFrame(); }
